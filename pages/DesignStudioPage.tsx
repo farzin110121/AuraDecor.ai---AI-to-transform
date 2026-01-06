@@ -48,14 +48,14 @@ const DesignStudioPage: React.FC = () => {
     setMainImage(null);
     setVersions([]);
     setMaterials([]);
-    setChatHistory([{ sender: 'AI', text: `Generating your initial design for the ${room.name} in a ${style} style.` }]);
+    setChatHistory([{ sender: 'AI', text: `Generating your initial design for the ${room.name} in a ${style} style. This may take a moment...` }]);
     setSelectedFinalDesigns([]);
 
     try {
       const imageUrl = await generateDesign(csm, room.name, style);
       setMainImage(imageUrl);
       setVersions([imageUrl]);
-      setChatHistory(prev => [...prev, { sender: 'AI', text: 'Here is your initial design. How would you like to refine it? Use the Object Legend for precise changes.' }]);
+      setChatHistory(prev => [...prev, { sender: 'AI', text: "Here is your initial design, precisely matched to your floorplan. You can now request changes.\n\n**IMPORTANT:** You can change materials (e.g., 'make the floor hardwood'), colors ('paint wall_01 light gray'), and furniture ('change the sofa to a leather one'). Structural changes (moving walls, doors, windows) and the camera angle are locked for accuracy." }]);
     } catch (err: any) {
       setError(err.message || "Failed to generate design.");
        setChatHistory(prev => [...prev, { sender: 'AI', text: `Sorry, I encountered an error: ${err.message}` }]);
@@ -216,7 +216,7 @@ const DesignStudioPage: React.FC = () => {
             <Card>
                 <h3 className="text-xl font-semibold mb-4">Refine with Chat</h3>
                 <div className="space-y-4">
-                   <div className="bg-brand-dark p-3 rounded-lg text-sm text-gray-300 h-48 overflow-y-auto">
+                   <div className="bg-brand-dark p-3 rounded-lg text-sm text-gray-300 h-48 overflow-y-auto whitespace-pre-wrap">
                         {chatHistory.map((msg, i) => (
                            <p key={i} className="mb-2"><span className={`font-bold ${msg.sender === 'AI' ? 'text-brand-gold' : 'text-gray-300'}`}>{msg.sender}:</span> {msg.text}</p>
                         ))}
@@ -275,3 +275,4 @@ const DesignStudioPage: React.FC = () => {
 };
 
 export default DesignStudioPage;
+    

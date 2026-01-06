@@ -14,7 +14,7 @@ const DESIGN_STYLES = ["Modern", "Luxury", "Scandinavian", "Minimalist", "Indust
 
 
 // Helper function for client-side image resizing
-const resizeImage = (file: File, maxDimension: number = 768): Promise<File> => {
+const resizeImage = (file: File, maxDimension: number = 512): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (event) => {

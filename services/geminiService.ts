@@ -63,19 +63,33 @@ const createApiError = (error: any, context: string): Error => {
 
 export const analyzeFloorplan = async (floorplanImage: File): Promise<CanonicalSpatialMap> => {
   const model = "gemini-3-flash-preview";
-  const prompt = `You are a specialist AI architect. Your task is to analyze the provided floorplan image and convert it into a structured Canonical Spatial Map (CSM) JSON object with extreme precision. Your analysis must be a 1:1 digital twin of the provided image.
+  const prompt = `System Role: You are an expert AI architect and drafter, a Universal Architectural Parser. Your goal is to convert ANY uploaded floor plan image into a standardized, machine-readable Canonical Spatial Map (CSM) JSON format with extreme precision. Your analysis must be a 1:1 digital twin of the provided image.
+
+**Architectural Symbol Legend (Your Knowledge Base):**
+-   **Walls:** Represented by thick, solid parallel lines. Exterior walls are typically thicker than interior walls.
+-   **Doors:** An opening in a wall, shown as a line perpendicular to the wall with a quarter-circle arc indicating the swing direction. The 'position' is the hinge point.
+-   **Windows:** A break in a wall, typically represented by thinner parallel lines within the wall's thickness.
+-   **Stairs:** A series of parallel lines representing steps, often with an arrow indicating the direction (up/down).
+-   **Fixed Equipment:**
+    -   **Kitchen Sink:** A rectangle with one or two smaller squares inside.
+    -   **Stove/Cooktop:** A square or rectangle, often with four circles or an 'X' on top.
+    -   **Toilet:** Usually a small circle connected to a rectangle or oval.
+    -   **Shower/Bath:** A large rectangle, often with an 'X' across it or a drain symbol.
+-   **Columns:** Solid filled squares or circles, often shown within a room or embedded in a wall.
 
 **CRITICAL RULES FOR ACCURACY:**
-1.  **Absolute Fidelity:** You MUST ONLY map what is explicitly visible in the floorplan. DO NOT add, invent, or hallucinate any architectural elements (walls, doors, windows, etc.) that are not present. Conversely, you MUST NOT omit any visible elements.
-2.  **Precise Placement:** The position and dimensions of every element must be calculated with the highest possible accuracy to reflect their true location on the 1000x1000 grid. This includes fixed equipment like sinks, stoves, or HVAC units shown in the plan.
+1.  **Symbol-First Analysis:** Your first priority is to scan the image and identify every element based on the Architectural Symbol Legend above.
+2.  **Absolute Fidelity:** You MUST ONLY map what is explicitly visible in the floorplan. DO NOT infer, invent, or hallucinate any architectural elements. If a symbol is present, it MUST be in the output. If it is not present, it MUST NOT be in the output.
+3.  **Precise Placement & Scaling:** Imagine a 1000x1000 grid overlaid on the image (top-left is 0,0). Find the dimension lines (lines with numbers like '3.80') to understand the scale. All element 'position' (top-left corner of the element's bounding box) and 'dimensions' MUST be calculated with the highest possible accuracy and normalized to this 1000x1000 grid.
 
-**Analysis and Structuring Instructions:**
-1.  **Examine the Image:** Meticulously identify every structural element (walls, doors, windows, columns, stairs) and every piece of fixed equipment. Identify every distinct room or space.
-2.  **Assign IDs:** Create a unique ID for every element (e.g., "wall_01", "door_01", "fixed_equipment_01") and room (e.g., "room_01").
-3.  **Extract Data:** For each element, determine its type, description, and estimate its position, dimensions, and rotation on the 1000x1000 grid (top-left is 0,0).
-4.  **Calculate Room Properties:** For each room, provide its name, classification, and a list of element IDs that form its boundary. Estimate its area in square meters (assume a standard scale). Set 'inferredCeilingHeight' to 2.8 meters.
-5.  **Determine Connectivity:** Based on shared doors and walls, determine the 'connectivity' and 'adjacency' arrays for each room.
-6.  **Format Output:** Your final output must be ONLY the JSON object that strictly adheres to the provided CSM schema. Do not include any other text, markdown, or explanations.`;
+**Step-by-Step Analysis and Structuring Instructions:**
+1.  **Scan for Symbols:** Meticulously identify every structural and infrastructure element using the provided Legend.
+2.  **Establish Scale:** Analyze the dimension lines to create a reliable pixel-to-meter conversion factor.
+3.  **Map Elements:** For each identified symbol, calculate its precise 'position', 'dimensions', and 'rotation' on the 1000x1000 grid. Provide a clear 'description' (e.g., "Living Room Window", "Kitchen Sink").
+4.  **Define Rooms:** Identify all enclosed spaces bounded by walls and doors. Assign a unique, sequential ID (e.g., "room_01", "room_02"). Calculate each room's 'area' in square meters using the scale you established.
+5.  **Assign IDs:** Create a unique, sequential ID for every single element (e.g., "wall_01", "door_01", "fixed_equipment_01").
+6.  **Determine Connectivity:** For each room, list the IDs of other rooms it is connected to via a door in the 'connectivity' array. List the IDs of all bounding elements in the 'elements' array.
+7.  **Format Output:** Your final output must be ONLY the JSON object that strictly adheres to the provided CSM schema. Do not include any other text, markdown, or explanations. Set 'inferredCeilingHeight' to 2.8 meters.`;
   const csmSchema = {
     type: Type.OBJECT,
     properties: {
@@ -170,21 +184,22 @@ export const generateDesign = async (analysis: CanonicalSpatialMap, roomName: st
             const model = "gemini-2.5-flash-image";
             const room = analysis.rooms.find(r => r.name === roomName);
             if (!room) throw new Error(`Room "${roomName}" not found in analysis.`);
-            const prompt = `You are an AI interior designer creating a photorealistic rendering. Your design must strictly adhere to the provided architectural blueprint (CSM).
+            const prompt = `You are an AI interior designer and photorealistic renderer. Your task is to generate a single, hyper-realistic image of an interior space based on a strict architectural blueprint.
 
-**Canonical Spatial Map (Immutable Constraints):**
+**Architectural Blueprint (Canonical Spatial Map - CSM):**
+This CSM is the absolute, non-negotiable source of truth for the room's geometry and structure.
 ${JSON.stringify(analysis, null, 2)}
 
 **Design Task:**
--   **Target Room:** ${roomName}
--   **Required Style:** ${style}
+1.  **Construct the 3D Scene:** Build a virtual 3D model of the room specified as "${roomName}". You MUST use the exact dimensions, positions, and properties for every wall, door, window, and fixed equipment element listed in the CSM. The architecture is immutable.
+2.  **Apply Interior Design:** Decorate the constructed room in the **"${style}"** style. This includes selecting appropriate materials for floors and walls, and furnishing the space with stylistically-consistent, movable furniture (sofas, chairs, tables, lamps, rugs, etc.).
+3.  **Set Camera View:** Position the virtual camera at a logical entry point (like a doorway) to provide the most comprehensive, wide-angle view of the entire room. The camera angle MUST be fixed and capture the whole space. This angle is now locked for this session.
+4.  **Render Image:** Generate a single, high-resolution, photorealistic image from the camera's perspective.
 
 **CRITICAL RULES:**
-1.  **Spatial Fidelity:** The CSM is the absolute source of truth. You MUST NOT alter any structural elements. All decorative items must be scaled and placed to fit exactly within the room dimensions and around fixed elements. Furniture cannot encroach on a door's swing path.
-2.  **Style Authenticity:** Apply materials, colors, and furniture definitive of the chosen architectural style.
-3.  **Camera Angle Rule:** The render MUST use a wide-angle, third-person perspective. The camera MUST be positioned at a logical entry point to the room (like a doorway) to provide the most comprehensive view possible. The camera's field of view MUST be set to capture the ENTIRETY of the room, from wall to wall, in a single, coherent shot. No part of the room should be cut off. This camera angle is now locked for this session.
-
-Generate a single, hyper-realistic, photorealistic image of the designed interior.`;
+-   **Absolute Architectural Fidelity:** You MUST NOT alter, move, add, or remove any structural element defined in the CSM (walls, windows, doors, fixed equipment). The generated image's geometry must be a 1:1 match with the blueprint.
+-   **Style Adherence:** The decor, materials, and color palette must be authentic to the requested style.
+-   **No Obstructions:** Furniture placement must be logical and not obstruct circulation paths or door swings.`;
             const response = await ai.models.generateContent({
                 model,
                 contents: { parts: [{ text: prompt }] },
@@ -219,23 +234,30 @@ export const refineDesign = async (userPrompt: string, analysis: CanonicalSpatia
         try {
             const model = 'gemini-2.5-flash-image';
             const imagePart = base64ToGenerativePart(currentImageBase64);
-            const prompt = `You are a precision AI image modification service. Your task is to execute a single, specific change to the provided image based on a user's command. Failure to make a discernible change is a critical error.
+            const prompt = `You are a precision AI image modification service acting as a "virtual decorator". You must adhere to a strict set of rules based on an immutable architectural blueprint.
 
-**Core Directive:** The output image MUST be identical to the input image in every way (camera angle, lighting, overall style) EXCEPT for the one specific modification requested by the user.
+**Your Role:**
+Your primary job is to be the **guardian of the architectural integrity defined by the CSM**. You will modify the provided image based on the user's request, but ONLY if the request is a valid "decorator" action. You will maintain the exact camera angle, lighting, and unmodified elements from the original image.
 
-**Critical Instructions:**
-1.  **Parse & Ground:** Analyze the user's request. Map the request to a specific object in the current render using the CSM Element Legend below (e.g., "the sofa" -> find the sofa object, "wall behind sofa" -> identify the correct wall ID).
-2.  **CSM Validation:** Verify the requested change is physically possible within the immutable CSM. If impossible (e.g., adding an item that blocks a door swing), you MUST explain why and you MUST NOT generate an image.
-3.  **Execute the Edit:** Apply the requested change ONLY to that object. Do not alter anything else.
-4.  **Prohibition:** You are absolutely prohibited from returning the original, unchanged image. If you cannot fulfill the request for a valid reason, you must explain this in text. Simply returning the same image is not an acceptable outcome.
-
-**Canonical Spatial Map Element Legend (Immutable):**
+**Immutable Architectural Blueprint (CSM):**
+This is the locked-down plan. The position and dimensions of these elements CANNOT be changed.
 ${JSON.stringify(analysis.elements, null, 2)}
 
 **User's Change Request:**
 "${userPrompt}"
 
-Proceed with the modification or provide a text-only explanation.`;
+---
+**MODIFICATION RULES & EXECUTION:**
+
+1.  **Analyze Request:** Is the user's request a "decorator" action or an "architect" action?
+    -   **Allowed (Decorator Actions):** Changing materials/colors (e.g., "make the floor dark wood," "paint wall_01 green"), swapping furniture (e.g., "change the sofa to a leather sectional"), adding decorative items (e.g., "add a plant in the corner").
+    -   **Forbidden (Architect Actions):** Moving/resizing/removing walls, doors, windows, or any element listed in the CSM. Changing the camera angle or overall room structure.
+
+2.  **Execute or Reject:**
+    -   **If ALLOWED:** Execute the single, specific change. The new image must be identical to the original except for the requested modification.
+    -   **If FORBIDDEN:** DO NOT generate an image. Instead, provide a text-only response explaining WHY the request is invalid. For example: "I cannot move wall_02 because it is a structural element defined in the architectural plan. I can, however, change its color or material."
+
+3.  **Critical Failure Condition:** Returning the original, unchanged image is a failure. You MUST either produce a modified image or a text explanation.`;
             const response = await ai.models.generateContent({
                 model,
                 contents: { parts: [imagePart, { text: prompt }] },
